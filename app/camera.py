@@ -12,7 +12,7 @@ from app import routes
 
 
 def descargar_modelo():
-    url = "https://drive.google.com/uc?id=https://drive.google.com/file/d/174Td9kRd10iImunxIwrXZsKn9PduBDTX/view?usp=sharing"  # <- Usa ID del archivo (no la URL completa)
+    url = "https://drive.google.com/uc?id=174Td9kRd10iImunxIwrXZsKn9PduBDTX"  # <- Usa ID del archivo (no la URL completa)
     output = "yolov5_model/best.pt"
 
     if not os.path.exists(output):
