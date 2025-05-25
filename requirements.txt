@@ -1,0 +1,12 @@
+gdown
+Flask==2.2.5
+flask-login
+flask-bcrypt
+flask-mongoengine
+gunicorn
+Werkzeug
+fpdf
+opencv-python-headless
+numpy
+torch>=1.7.0
+
