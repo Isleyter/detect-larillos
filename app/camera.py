@@ -44,7 +44,7 @@ class VideoCamera:
         self.start_time = datetime.now()
         self.end_time = None
         self.tiempos_fisura = []
-        sys.modules['pathlib'].PosixPath = Path
+        #sys.modules['pathlib'].PosixPath = Path
 
         try:
             self.model = torch.hub.load('ultralytics/yolov5', 'custom', path='best50e1.pt')
