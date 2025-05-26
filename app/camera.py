@@ -1,77 +1,71 @@
 import gdown # type: ignore
 import os
-
 import cv2  # type: ignore
 import torch # type: ignore
 from pathlib import Path
 import sys
-#from ultralytics import YOLO
-import torch # type: ignore
 from datetime import datetime
 from app import routes
 
-
 def descargar_modelo():
-    url = "https://drive.google.com/uc?id=174Td9kRd10iImunxIwrXZsKn9PduBDTX"  # <- Usa ID del archivo (no la URL completa)
+    url = "https://drive.google.com/uc?id=174Td9kRd10iImunxIwrXZsKn9PduBDTX"
     output = "yolov5_model/best.pt"
-
     if not os.path.exists(output):
         os.makedirs("yolov5_model", exist_ok=True)
         print("Descargando modelo YOLO...")
         gdown.download(url, output, quiet=False)
-# Llamamos a la función inmediatamente para asegurar que el modelo esté listo
+
 descargar_modelo()
+
+def detectar_fuente_video():
+    import platform
+    en_render = os.environ.get("RENDER", "false").lower() == "true"
+    if en_render:
+        print("⚠️ Ejecutando en Render (sin acceso a cámara física).")
+        return None
+
+    sistema = platform.system()
+    print(f"🖥️ Sistema operativo detectado: {sistema}")
+    
+    for index in range(3):
+        cap = cv2.VideoCapture(index)
+        if cap.isOpened():
+            print(f"✅ Cámara encontrada en índice {index}")
+            return cap
+    print("❌ No se encontró cámara disponible.")
+    return None
 
 class VideoCamera:
     def __init__(self):
         descargar_modelo()
-        self.video =  None
-        self.running = False  # iniciar como False
+        self.video = detectar_fuente_video()
+        self.running = False
         self.total_counts = {'fisura': 0, 'rotura': 0, 'bueno': 0}  
-        # Asegúrate de abrir la cámara en el inicio
-        try:
-            self.video = cv2.VideoCapture(0)  # Usa el índice de la cámara (0 para la primera)
-            if not self.video.isOpened():
-                raise ValueError("No se pudo abrir la cámara.")
-        except Exception as e:
-            print(f"❌ Error al inicializar la cámara: {e}")
-            self.video = None
-
         self.start_time = datetime.now()
         self.end_time = None
-        #.................................
-        self.tiempos_fisura = []  # lista de tiempos de detección
-        # Compatibilidad pathlib en Windows
+        self.tiempos_fisura = []
         sys.modules['pathlib'].PosixPath = Path
-        # Cargar modelo YOLOv5
-        self.model = torch.hub.load('ultralytics/yolov5', 'custom', path='best50e1.pt')  # force_reload=True
-        self.model.conf = 0.5
-        self.model.iou = 0.45
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self.model.to(device)
+
+        try:
+            self.model = torch.hub.load('ultralytics/yolov5', 'custom', path='best50e1.pt')
+            self.model.conf = 0.5
+            self.model.iou = 0.45
+            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+            self.model.to(device)
+        except Exception as e:
+            print(f"❌ Error al cargar el modelo: {e}")
+            self.model = None
 
     def start(self):
         if self.video is None:
-            self.__init__()  # Vuelve a inicializar si la cámara no estaba abierta.
+            self.video = detectar_fuente_video()
         self.running = True
 
     def stop(self):
         self.running = False
-        if self.video is not None:
+        if self.video:
             self.video.release()
-    
-    #detectar fisura
-    #def detectar_fisura(self, frame):
-    #    inicio = datetime.now()
-    #    # ----- LÓGICA DE DETECCIÓN DE FISURA -----
-    #    resultado = self.mi_modelo.detect(frame)  # Asegúrate de tener esto definido
-    #    fin = datetime.now()
-    #    duracion = (fin - inicio).total_seconds()
-    #    # Guardar tiempo si se detectó una fisura
-    #    if any(det['label'] == 'fisura' for det in resultado):  # ajusta si tu resultado es distinto
-    #        self.tiempos_fisura.append(duracion)
-    #    return resultado
-    
+
     def get_counts(self):
         total = sum(self.total_counts.values())
         buenos = self.total_counts['bueno']
@@ -84,15 +78,6 @@ class VideoCamera:
             "precision": precision
         }
 
-    #def get_precision(self):
-    #    total_detectados = sum(self.total_counts.values())
-    #    if total_detectados == 0:
-    #        return 0.0
-    #
-    #    defectuosos = self.total_counts.get('fisura', 0) + self.total_counts.get('rotura', 0)
-    #    return round((defectuosos / total_detectados) * 100, 2)
-
-    #--METODO PARA CALCULAR % DE LADRILLOS FRACTURADOS----
     def get_precision(self):
         total_fisura = self.total_counts.get('fisura', 0)
         total_rotura = self.total_counts.get('rotura', 0)
@@ -100,16 +85,11 @@ class VideoCamera:
         total_defectuosos = total_fisura + total_rotura
         total_detectados = total_defectuosos + total_bueno
         if total_detectados == 0:
-            return 0.0  # Para evitar división por cero
+            return 0.0
         precision = (total_defectuosos / total_detectados) * 100
         return round(precision, 2)
 
-    #------restaurar contador--------
     def reset_counts(self):
-        self.total = 0
-        self.buenos = 0
-        self.malos = 0
-        self.precision = 0.0
         self.total_counts = {'fisura': 0, 'rotura': 0, 'bueno': 0}
         self.tiempos_fisura = []
         self.start_time = datetime.now()
@@ -119,8 +99,8 @@ class VideoCamera:
         if self.video is None or not self.video.isOpened():
             return None
         success, frame = self.video.read()
-        if not success:
-            return None  # Si no se pudo obtener el frame, retorna None
+        if not success or frame is None:
+            return None
         self.counts = {'fisura': 0, 'rotura': 0, 'bueno': 0}
         img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         results = self.model(img, size=640)
@@ -132,7 +112,6 @@ class VideoCamera:
                 self.counts[label] += 1
                 self.total_counts[label] += 1
 
-                # Medir tiempo si es una fisura
                 if label == 'fisura':
                     inicio = datetime.now()
                     duracion = (inicio - self.start_time).total_seconds()
@@ -148,22 +127,19 @@ class VideoCamera:
         cv2.putText(frame, conteo_texto, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
 
         ret, jpeg = cv2.imencode('.jpg', frame)
-        self.precision = self.get_precision()  # Actualizamos la precisión
+        self.precision = self.get_precision()
         return jpeg.tobytes()
 
     def release(self):
-        """Libera recursos y guarda resultados."""
-        if self.video is not None:
-            if self.video.isOpened():
-                self.video.release()
-            self.video = None  # ✅ IMPORTANTE: marcar como None
+        if self.video and self.video.isOpened():
+            self.video.release()
+        self.video = None
         self.end_time = datetime.now()
         try:
             self.save_results()
         except Exception as e:
             print(f"[Error al guardar resultados]: {e}")
     
-    #metodo para calcular el tiempo promedio
     def obtener_tiempo_promedio_fisura(self):
         if not self.tiempos_fisura:
             return 0.0
@@ -171,18 +147,12 @@ class VideoCamera:
 
     def save_results(self):
         from fpdf import FPDF # type: ignore
-        import os
-
         total = sum(self.total_counts.values())
         malos = self.total_counts['fisura'] + self.total_counts['rotura']
         buenos = self.total_counts['bueno']
-        precision = 0
-        if malos + buenos > 0:
-            precision = (self.total_counts['fisura'] / (malos + buenos)) * 100
-        
-        #-------------------------------------
+        precision = (self.total_counts['fisura'] / (malos + buenos)) * 100 if malos + buenos > 0 else 0
         tiempo_promedio_fisura = self.obtener_tiempo_promedio_fisura()
-        #-----------------------------------
+
         pdf = FPDF()
         pdf.add_page()
         pdf.set_font("Arial", size=12)
@@ -193,17 +163,12 @@ class VideoCamera:
         pdf.cell(200, 10, txt=f"Buenos: {buenos}", ln=True)
         pdf.cell(200, 10, txt=f"Malos: {malos}", ln=True)
         pdf.cell(200, 10, txt=f"Precisión de fisura: {precision:.2f}%", ln=True)
-
-        #--------------
-         # ➕ Agrega el tiempo promedio al PDF
-        pdf.cell(200, 10, txt=f"Tiempo promedio de detección de fisura: {tiempo_promedio_fisura:.2f} seg", ln=True)
-        #-------------
+        pdf.cell(200, 10, txt=f"Tiempo promedio detección fisura: {tiempo_promedio_fisura:.2f} seg", ln=True)
 
         os.makedirs("reportes", exist_ok=True)
         filename = f"reporte_{self.start_time.strftime('%Y%m%d_%H%M%S')}.pdf"
         pdf.output(f"reportes/{filename}")
 
-#------------conteo actualizado
 def generate_frames():
     while True:
         frame = video_camera.get_frame() # type: ignore
@@ -211,4 +176,3 @@ def generate_frames():
             continue
         yield (b'--frame\r\n'
                b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
-               
