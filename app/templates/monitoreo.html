@@ -125,13 +125,36 @@
     </div>
   {% endif %}
 
+
+
+
   <!-- Fila centrada de botones -->
+    <!-- Selector de cámara -->
+<div class="form-group mb-3">
+  <label for="camara">Selecciona la cámara:</label>
+  <select class="form-control" id="camara" name="camara" {% if monitoring_active %}disabled{% endif %}>
+    {% for camara in camaras %}
+      <option value="{{ camara }}">Cámara {{ camara }}</option>
+    {% endfor %}
+  </select>
+</div>
+
+
+
   <div class="d-flex justify-content-center align-items-center mt-4 gap-3">
-    <form action="{{ url_for('routes.iniciar_monitoreo') }}" method="POST">
+    <!--<form action="{{ url_for('routes.iniciar_monitoreo') }}" method="POST">
+      <button type="submit" class="btn btn-success">
+        <i class="bi bi-play-btn"></i> Iniciar Monitoreo
+      </button>
+    </form> -->
+    <form action="{{ url_for('routes.iniciar_monitoreo') }}" method="POST" id="formIniciar">
+      <input type="hidden" name="camara" id="camaraSeleccionada">
       <button type="submit" class="btn btn-success">
         <i class="bi bi-play-btn"></i> Iniciar Monitoreo
       </button>
     </form>
+
+
 
     {% if monitoring_active %}
     <form action="{{ url_for('routes.finalizar_monitoreo') }}" method="POST">
@@ -147,6 +170,28 @@
 
 <!-- JavaScript -->
 <script>
+  document.getElementById("formIniciar").addEventListener("submit", function (e) {
+    const camara = document.getElementById("camara").value;
+    document.getElementById("camaraSeleccionada").value = camara;
+  });
+</script>
+
+<script>
+  document.getElementById("btnIniciar").addEventListener("click", function () {
+  const camaraIndex = document.getElementById("camara").value;
+
+  fetch(`/start_monitoring?camara=${camaraIndex}`, {
+    method: "GET"
+  }).then(response => {
+    if (response.ok) {
+      console.log("Monitoreo iniciado con cámara:", camaraIndex);
+    }
+  });
+});
+
+</script>
+
+<script>
 // Actualizar conteo cada 2 segundos
 function actualizarConteo() {
   fetch('/conteo')
@@ -161,6 +206,8 @@ function actualizarConteo() {
 setInterval(actualizarConteo, 2000);
 </script>
 
+
+
 {% if monitoring_finished %}
 <script>
   // Reiniciar contadores en la interfaz
@@ -168,6 +215,7 @@ setInterval(actualizarConteo, 2000);
   document.getElementById('buenos').textContent = '0';
   document.getElementById('malos').textContent = '0';
   document.getElementById('precision').textContent = '0%';
+
 </script>
 {% endif %}
 
