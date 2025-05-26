@@ -1,15 +1,16 @@
-from flask import jsonify, Blueprint, render_template, redirect, session, url_for, Response, send_file, request # type: ignore
+from flask import Flask, flash, jsonify, Blueprint, render_template, redirect, session, url_for, Response, send_file, request # type: ignore
 from flask_login import current_user, login_required # type: ignore
 from datetime import date, datetime
 
 from .extensions import db, bcrypt
 
-from app.camera import VideoCamera, generate_frames
+from app.camera import VideoCamera, camera, listar_camaras_disponibles, generate_frames
 from .models import Monitoreo
 from app.utils import generar_pdf, get_monitoring_results
 from math import ceil
-from mongoengine.errors import DoesNotExist
-
+from mongoengine.errors import DoesNotExist # type: ignore
+#from app.camera import camera, listar_camaras_disponibles
+import cv2
 import os
 
 routes = Blueprint('routes', __name__)
@@ -52,26 +53,79 @@ def panel():
 # -- MONITOREO --
 @routes.route('/monitoreo', methods=['GET'])
 def monitoreo():
+    from app.camera import listar_camaras_disponibles
     monitoring_active = camera is not None and camera.running
     datos = Monitoreo.objects.order_by('-id').first()
-    return render_template('monitoreo.html', datos=datos, monitoring_active=monitoring_active)
+    camaras_disponibles = listar_camaras_disponibles()
+    
+    return render_template('monitoreo.html',
+                           datos=datos,
+                           camaras=camaras_disponibles,
+                           monitoring_active=monitoring_active)
+
+#@routes.route('/monitoreo', methods=['GET'])
+#def monitoreo():
+#    monitoring_active = camera is not None and camera.running
+#    datos = Monitoreo.objects.order_by('-id').first()
+#    return render_template('monitoreo.html', datos=datos, monitoring_active=monitoring_active)
 
 #-- IICIAR Y FINALIZAR MONITOREO
 @routes.route('/iniciar_monitoreo', methods=['POST'])
 def iniciar_monitoreo():
     global camera
     try:
-        if camera is None:
-            camera = VideoCamera()
-        camera.start()  # Activar monitoreo (marca running = True)
+        # Obtener el índice de cámara desde el formulario
+        camara_index = int(request.form.get('camara', 0))
+
+        # Liberar cámara previa si existe
+        if camera:
+            camera.release()
+            camera = None
+
+        # Crear nueva instancia con el índice seleccionado
+        camera = VideoCamera(camara_index)
+        camera.start()
+        flash(f"✅ Monitoreo iniciado con cámara {camara_index}")
         print("✅ Cámara inicializada correctamente.")
     except Exception as e:
+        flash("❌ Error al iniciar la cámara.")
         print("❌ Error al iniciar la cámara:", e)
-    
+
+    # Guardar la hora de inicio en sesión
     session['hora_inicio'] = datetime.now().strftime('%H:%M:%S')
     print("✅ Hora guardada en sesión:", session['hora_inicio'])
+
     return redirect(url_for('routes.monitoreo'))
+
+#@routes.route('/iniciar_monitoreo', methods=['POST'])
+#def iniciar_monitoreo():
+#    global camera
+#    try:
+#        if camera is None:
+#            camera = VideoCamera()
+#        camera.start()  # Activar monitoreo (marca running = True)
+#        print("✅ Cámara inicializada correctamente.")
+#    except Exception as e:
+#        print("❌ Error al iniciar la cámara:", e)
+#    
+#    session['hora_inicio'] = datetime.now().strftime('%H:%M:%S')
+#    print("✅ Hora guardada en sesión:", session['hora_inicio'])
+#    return redirect(url_for('routes.monitoreo'))
     
+@routes.route('/start_monitoring')
+def start_monitoring():
+    from app.camera import VideoCamera
+    global camera
+
+    camara_index = int(request.args.get('camara', 0))  # valor por defecto 0
+
+    if camera:
+        camera.release()
+        camera = None
+
+    camera = VideoCamera(camara_index)
+    camera.start()
+    return '', 204
 
 @routes.route('/finalizar_monitoreo', methods=['POST'])
 @login_required
@@ -90,12 +144,7 @@ def finalizar_monitoreo():
     hora_fin_time = hora_fin.time()
 
     # Obtener resultados en vivo
-    try:
-        resultados = camera.get_counts()
-    except Exception as e:
-        return f"Error al obtener resultados: {str(e)}", 500
-
-
+    resultados = camera.get_counts()
     precision = float(resultados["precision"])
 
     # Obtener tiempo promedio para fisura
@@ -132,16 +181,32 @@ def finalizar_monitoreo():
     camera = None
     session.pop("hora_inicio", None)
 
-    # Pasar los datos a monitoreo.html
-    return render_template("monitoreo.html", monitoring_finished=True, 
-                            datos={
-                                "total": resultados["total"],
-                                "buenos": resultados["buenos"],
-                                "malos": resultados["malos"],
-                                "precision": precision,
-                                "tiempo_promedio_fisura": round(tiempo_promedio_fisura, 2)  #lo pasamos a la plantilla
-                            }
-    )
+    #datos = Monitoreo.objects.order_by('-id').first()
+    camaras_disponibles = listar_camaras_disponibles()
+    monitoring_active = False
+
+    return render_template("monitoreo.html",
+                           monitoring_finished=True,
+                           datos={
+                               "total": resultados["total"],
+                               "buenos": resultados["buenos"],
+                               "malos": resultados["malos"],
+                               "precision": precision,
+                               "tiempo_promedio_fisura": round(tiempo_promedio_fisura, 2)
+                           },
+                           camaras=camaras_disponibles,
+                           monitoring_active=monitoring_active)
+
+    ## Pasar los datos a monitoreo.html
+    #return render_template("monitoreo.html", monitoring_finished=True, 
+    #                        datos={
+    #                            "total": resultados["total"],
+    #                            "buenos": resultados["buenos"],
+    #                            "malos": resultados["malos"],
+    #                            "precision": precision,
+    #                            "tiempo_promedio_fisura": round(tiempo_promedio_fisura, 2)  #lo pasamos a la plantilla
+    #                        }
+    #)
 
 
 # -- RESULTADOS --
@@ -197,7 +262,7 @@ def descargar_reporte(monitoreo_id):
         return "❌ Monitoreo no encontrado", 404
     
     # Solo una vez 'app/static'
-    pdf_path = os.path.join(os.getcwd(), 'app', monitoreo.pdf_path)
+    pdf_path = os.path.join(os.path.dirname(__file__), 'static', monitoreo.pdf_path)
 
     if not os.path.exists(pdf_path):
         return f"No se encontró el archivo: {pdf_path}", 404
@@ -251,5 +316,16 @@ def eliminar_monitoreo(monitoreo_id):
     
     return redirect(url_for('routes.resultados'))
 
+
+#--DETECTAR CAMARAS----
+@routes.route('/listar_camaras')
+def listar_camaras():
+    disponibles = []
+    for i in range(5):  # escanea los primeros 5 dispositivos
+        cap = cv2.VideoCapture(i)
+        if cap.isOpened():
+            disponibles.append({'id': i, 'nombre': f'Cámara {i}'})
+            cap.release()
+    return jsonify(disponibles)
 
 
