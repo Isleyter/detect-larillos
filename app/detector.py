@@ -76,8 +76,16 @@ class ClienteMonitoreo:
 
 
     def resetear(self, usuario_id):
-        if usuario_id in self.data:
-            del self.data[usuario_id]
+        self.data[usuario_id] = {
+            "total": 0,
+            "buenos": 0,
+            "fisura": 0,
+            "rotura": 0,
+            "tiempos_fisura": [],
+            "start_time": time.time(),  # 👈 asegura un nuevo inicio limpio
+            "tp_fisura": 0,
+            "fp_fisura": 0
+       }
 
 
 # Instancia global
