@@ -1,7 +1,8 @@
 reportlab
 Flask==2.2.5
 Flask-Login
-flak-bcrypt
+flask-bcrypt
+
 flask-mongoengine
 torch>=1.7.0
 Werkzeug
