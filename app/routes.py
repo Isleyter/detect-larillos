@@ -5,6 +5,7 @@ from datetime import datetime
 from math import ceil
 import os
 from mongoengine.errors import DoesNotExist # type: ignore
+from threading import Thread
 
 from .extensions import db, bcrypt
 from .models import Monitoreo
