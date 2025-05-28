@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: ladrillos-detector
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn run:app"
+    envVars:
+      - key: SECRET_KEY
+        value: "your_secret_key"
