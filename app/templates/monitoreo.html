@@ -1,0 +1,139 @@
+{% extends 'base.html' %}
+{% block title %}Resultados{% endblock %}
+
+{% block content %}
+<style>
+    #video {
+        width: 100%;
+        max-width: 640px;
+        border: 2px solid #444;
+        border-radius: 12px;
+    }
+    .contador {
+        font-size: 1.2rem;
+    }
+</style>
+
+<nav class="navbar sticky-top navbar-he bg-body-tertiary text-center">
+    <div style="display: block;" class="container-fluid text-center ">
+        <h2 >Monitoreo en Vivo</h2>
+    </div>
+</nav>
+
+<div class="container py-4 container-fluid " >
+    <div class="mb-3">
+        <video id="video" autoplay playsinline width="640" height="480"></video>
+    </div>
+
+    <div class="row text-center contador mb-4">
+        <div class="col">Total: <span id="total">0</span></div>
+        <div class="col">Buenos: <span id="buenos">0</span></div>
+        <div class="col">Fisura: <span id="fisura">0</span></div>
+        <div class="col">Rotura: <span id="rotura">0</span></div>
+        <div class="col">Precisión: <span id="precision">0.0</span>%</div>
+        <div class="col">⏱ Tiempo medio fisura: <span id="tiempo_fisura">0.0</span>s</div>
+    </div>
+    <div class="mb-12">
+        <label for="cameraSelect" class="form-label fw-bold">🎥 Seleccionar cámara:</label>
+        <select id="cameraSelect" class="form-select w-auto d-inline-block">
+            <!-- Opciones agregadas dinámicamente con JS -->
+        </select>
+    </div>
+    <div class="d-flex gap-2 container-fluid text-center ">
+        <button id="iniciar" class="btn btn-success">Iniciar Monitoreo</button>
+        <button id="finalizar" class="btn btn-danger" disabled>Finalizar Monitoreo</button>
+    </div>
+</div>
+
+<script>
+    let video = document.getElementById('video');
+    let streaming = false;
+    let intervalId = null;
+    let stream = null;
+
+    async function listarCamaras() {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const cameras = devices.filter(device => device.kind === 'videoinput');
+        const select = document.getElementById('cameraSelect');
+        select.innerHTML = '';
+        cameras.forEach((camera, index) => {
+            const option = document.createElement('option');
+            option.value = camera.deviceId;
+            option.text = camera.label || `Cámara ${index + 1}`;
+            select.appendChild(option);
+        });
+    }
+
+    async function iniciarVideoConCamaraSeleccionada() {
+        const selectedDeviceId = document.getElementById('cameraSelect').value;
+        if (!selectedDeviceId) {
+            alert("Por favor selecciona una cámara.");
+            return;
+        }
+
+        try {
+            stream = await navigator.mediaDevices.getUserMedia({
+                video: { deviceId: { exact: selectedDeviceId } }
+            });
+            video.srcObject = stream;
+            video.play();
+        } catch (error) {
+            console.error("Error al acceder a la cámara:", error);
+            alert("No se pudo acceder a la cámara.");
+        }
+    }
+
+    async function capturarYEnviarFrame() {
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        canvas.toBlob(async function (blob) {
+            const formData = new FormData();
+            formData.append("frame", blob, "frame.jpg");
+
+            const response = await fetch("/procesar_frame", {
+                method: "POST",
+                body: formData
+            });
+
+            const data = await response.json();
+            document.getElementById("total").innerText = data.total ?? 0;
+            document.getElementById("buenos").innerText = data.buenos ?? 0;
+            document.getElementById("fisura").innerText = data.fisura ?? 0;
+            document.getElementById("rotura").innerText = data.rotura ?? 0;
+            document.getElementById("precision").innerText = data.precision ?? "0.0";
+            document.getElementById("tiempo_fisura").innerText = data.tiempo_promedio_fisura?.toFixed(2) ?? "0.0";
+        }, 'image/jpeg');
+    }
+
+    document.getElementById('iniciar').addEventListener('click', async () => {
+        await iniciarVideoConCamaraSeleccionada();
+        await fetch("/iniciar_monitoreo", { method: "POST" });
+        document.getElementById('iniciar').disabled = true;
+        document.getElementById('finalizar').disabled = false;
+        intervalId = setInterval(capturarYEnviarFrame, 1000);
+    });
+
+    document.getElementById('finalizar').addEventListener('click', async () => {
+        clearInterval(intervalId);
+        if (stream) stream.getTracks().forEach(track => track.stop());
+
+        const response = await fetch("/finalizar_monitoreo", { method: "POST" });
+        const result = await response.json();
+        if (result.status === "ok") {
+            alert("✅ Monitoreo finalizado. ID del reporte: " + result.reporte_id);
+            window.location.href = "/monitoreo";
+        } else {
+            alert("❌ Error al finalizar monitoreo");
+        }
+
+        document.getElementById('iniciar').disabled = false;
+        document.getElementById('finalizar').disabled = true;
+    });
+
+    window.onload = listarCamaras;
+</script>
+{% endblock %}
