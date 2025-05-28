@@ -179,14 +179,16 @@ def procesar_frame():
 
 # Ruta para iniciar monitoreo
 @routes.route('/iniciar_monitoreo', methods=['POST'])
+@login_required
 def iniciar_monitoreo():
-    def ejecutar_monitoreo():
-        cliente.iniciar()
+    usuario_id = str(current_user.id)
+    
+    try:
+        cliente_monitoreo.resetear(usuario_id)
+        return jsonify({'status': 'Monitoreo iniciado'}), 200
+    except Exception as e:
+        return jsonify({'error': f'No se pudo iniciar el monitoreo: {str(e)}'}), 500
 
-    # Ejecuta en segundo plano
-    thread = Thread(target=ejecutar_monitoreo)
-    thread.daemon = True
-    thread.start()
 
     return jsonify({'status': 'Monitoreo iniciado'}), 200
 
