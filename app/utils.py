@@ -8,7 +8,7 @@ from io import BytesIO
 
 
 # Carga el modelo globalmente
-sys.modules['pathlib'].PosixPath = Path
+#sys.modules['pathlib'].PosixPath = Path
 modelo = torch.hub.load('ultralytics/yolov5', 'custom', path='best50e1.pt')
 modelo.conf = 0.5 # type: ignore
 modelo.iou = 0.45 # type: ignore
