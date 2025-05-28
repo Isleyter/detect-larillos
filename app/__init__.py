@@ -2,9 +2,14 @@ from flask import Flask # type: ignore
 from .extensions import login_manager, bcrypt
 from config import Config
 from mongoengine import connect # type: ignore
+from flask_cors import CORS
+
 
 def create_app():
     app = Flask(__name__)
+
+    CORS(app, resources={r"/*": {"origins": "*"}})  # Abierto para desarrollo
+
     app.config.from_object(Config)
 
     # ✅ Conexión MongoEngine usando los valores de config
