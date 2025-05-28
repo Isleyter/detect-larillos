@@ -3,7 +3,7 @@ Flask==2.2.5
 Flask-Login
 flask-bcrypt
 seaborn
-
+flask-cors
 flask-mongoengine
 torch>=1.7.0
 Werkzeug
