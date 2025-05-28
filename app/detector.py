@@ -93,7 +93,12 @@ def procesar_frame_yolo(file_storage, usuario_id="default"):
         return {"error": "No se pudo leer la imagen"}
 
     # Simular detección (REEMPLAZA por detección real con tu modelo YOLOv5)
-    predicciones = procesar_imagen(frame) # type: ignore
+    try:
+        predicciones = procesar_imagen(frame)
+    except Exception as e:
+        print("❌ Error en procesar_imagen:", e)
+        return {"error": "fallo en detección"}
+
 
     # Nombre del frame (en un entorno real puedes generar hash o timestamp)
     frame_name = "img1.jpg"  # <- esto debe coincidir con las etiquetas reales si quieres precisión real
