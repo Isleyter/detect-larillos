@@ -52,10 +52,26 @@
     let stream = null;
 
     async function listarCamaras() {
+        try {
+            // Solicita acceso sin seleccionar cámara específica (permite detectar dispositivos)
+            await navigator.mediaDevices.getUserMedia({ video: true });
+        } catch (e) {
+            console.warn("⚠️ No se pudo acceder a la cámara para enumerar dispositivos:", e);
+        }
+    
         const devices = await navigator.mediaDevices.enumerateDevices();
         const cameras = devices.filter(device => device.kind === 'videoinput');
         const select = document.getElementById('cameraSelect');
         select.innerHTML = '';
+    
+        if (cameras.length === 0) {
+            const option = document.createElement('option');
+            option.text = "No se detectaron cámaras";
+            option.disabled = true;
+            select.appendChild(option);
+            return;
+        }
+    
         cameras.forEach((camera, index) => {
             const option = document.createElement('option');
             option.value = camera.deviceId;
@@ -63,6 +79,7 @@
             select.appendChild(option);
         });
     }
+
 
     async function iniciarVideoConCamaraSeleccionada() {
         const selectedDeviceId = document.getElementById('cameraSelect').value;
