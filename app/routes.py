@@ -176,12 +176,18 @@ def procesar_frame():
 #    })
 
 
-# -- INICIAR MONITOREO --
+# Ruta para iniciar monitoreo
 @routes.route('/iniciar_monitoreo', methods=['POST'])
 def iniciar_monitoreo():
-    reset_monitoreo() # type: ignore
-    session["hora_inicio"] = datetime.now().strftime('%H:%M:%S')
-    return jsonify({'status': 'Monitoreo iniciado'})
+    def ejecutar_monitoreo():
+        cliente.iniciar()
+
+    # Ejecuta en segundo plano
+    thread = Thread(target=ejecutar_monitoreo)
+    thread.daemon = True
+    thread.start()
+
+    return jsonify({'status': 'Monitoreo iniciado'}), 200
 
 # -- FINALIZAR MONITOREO --
 @routes.route('/finalizar_monitoreo', methods=['POST'])
